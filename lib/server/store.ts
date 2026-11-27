@@ -475,7 +475,33 @@ export function importSnapshot(raw: unknown): boolean {
   }
 
   if (snapshot.pumpAlert && typeof snapshot.pumpAlert === 'object') {
-    store.pumpAlert = { ...(snapshot.pumpAlert as PumpAlert) };
+    const saved = snapshot.pumpAlert as Partial<PumpAlert>;
+    const remainingByGroup: Record<string, number> = {};
+
+    if (saved.remainingByGroup && typeof saved.remainingByGroup === 'object') {
+      for (const [group, value] of Object.entries(saved.remainingByGroup)) {
+        const seconds = toFinite(value);
+
+        if (seconds !== null && seconds >= 0) remainingByGroup[group] = seconds;
+      }
+    }
+
+    // snapshot อาจเขียนโดยโค้ดเวอร์ชันอื่น (เช่น เว็บ beta ที่ใช้ Firebase เดียวกัน)
+    // → เติมฟิลด์ที่หายให้ครบตามสัญญาของ PumpAlert ก่อนส่งออก API
+    store.pumpAlert = {
+      active: saved.active === true,
+      pausedGroups: Array.isArray(saved.pausedGroups)
+        ? saved.pausedGroups.filter(
+            (group): group is string => typeof group === 'string'
+          )
+        : [],
+      remainingSeconds: toFinite(saved.remainingSeconds),
+      remainingByGroup,
+      message: typeof saved.message === 'string' ? saved.message : null,
+      waterLevel: toFinite(saved.waterLevel),
+      resumeThreshold: toFinite(saved.resumeThreshold),
+      at: typeof saved.at === 'string' ? saved.at : null,
+    };
   }
 
   if (typeof snapshot.updatedAt === 'string') store.updatedAt = snapshot.updatedAt;
