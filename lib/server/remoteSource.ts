@@ -132,11 +132,10 @@ function mergeSnapshot(remote: RemoteLatest) {
     }
   }
 
+  // ต้นทางไม่ส่งแจ้งเตือนมา (null) ไม่ได้แปลว่า "ล้างแจ้งเตือน" → คงของเดิมไว้
   let pumpAlert: PumpAlert | null = current.pumpAlert;
 
-  if (remote.pumpAlert === null) {
-    pumpAlert = null;
-  } else if (isRecord(remote.pumpAlert)) {
+  if (isRecord(remote.pumpAlert)) {
     pumpAlert = {
       ...(current.pumpAlert ?? {}),
       ...remote.pumpAlert,

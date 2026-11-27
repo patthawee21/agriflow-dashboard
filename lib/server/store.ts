@@ -138,12 +138,155 @@ export function getStore(): FarmStore {
   return store;
 }
 
+// ==============================
+// ตัวช่วย merge แบบ "ค่าว่างไม่ทับค่าเดิม"
+// ==============================
+
+/**
+ * overlay = ค่าใหม่ (ที่ไม่ใช่ null) ชนะ
+ * fill    = เติมเฉพาะช่องที่ยังว่าง (ใช้ตอนอ่านของเก่ามาเติมก่อนเขียนลงที่เก็บถาวร)
+ */
+type SnapshotMode = 'overlay' | 'fill';
+
+const WEATHER_NUMBER_KEYS = [
+  'temperatureC',
+  'humidity',
+  'etoMmPerDay',
+  'pressureHpa',
+  'lightLux',
+  'windMs',
+  'solarRadiationWm2',
+  'rainfallMm',
+] as const;
+
+const ZONE_NUMBER_KEYS = [
+  'soilWaterKpa',
+  'etoMmPerHour',
+  'soilTempC',
+  'soilHumidity',
+  'soilMoisturePercent',
+] as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** รวมค่าอากาศ — ค่าที่เป็น null/undefined/NaN คือ "ไม่มีข้อมูล" จึงคงค่าเดิมไว้ */
+function mergeWeatherNumbers(
+  base: Weather,
+  patch: unknown,
+  mode: SnapshotMode = 'overlay'
+): Weather {
+  if (!isRecord(patch)) return base;
+
+  const next: Weather = { ...base };
+
+  for (const key of WEATHER_NUMBER_KEYS) {
+    const value = toFinite(patch[key]);
+
+    if (value === null) continue;
+    if (mode === 'fill' && toFinite(next[key]) !== null) continue;
+
+    next[key] = value;
+  }
+
+  return next;
+}
+
+/** รวมค่าในแปลง — ค่าที่หายไปไม่ลบค่าเดิม */
+function mergeZoneValues(
+  base: ZoneValues,
+  patch: unknown,
+  mode: SnapshotMode = 'overlay'
+): ZoneValues {
+  if (!isRecord(patch)) return { ...base };
+
+  const next: ZoneValues = { ...base };
+
+  for (const key of ZONE_NUMBER_KEYS) {
+    const value = toFinite(patch[key]);
+
+    if (value === null) continue;
+    if (mode === 'fill' && toFinite(next[key]) !== null) continue;
+
+    next[key] = value;
+  }
+
+  return next;
+}
+
+/**
+ * รวมสถานะแจ้งเตือนพักรดน้ำ
+ * ฟิลด์ที่ส่งมาเป็น null/หายไป → คงค่าเดิม (กันหน้าเว็บขึ้น "--")
+ */
+function mergePumpAlertFields(
+  base: PumpAlert | null,
+  patch: unknown,
+  mode: SnapshotMode = 'overlay'
+): PumpAlert {
+  const record = isRecord(patch) ? patch : {};
+  // fill = ข้อมูลเก่าจากที่เก็บถาวร → ไม่ทับของใหม่ที่มีอยู่ในหน่วยความจำ
+  const existing = mode === 'fill' ? base : null;
+
+  const pausedGroupsFromPatch = Array.isArray(record.pausedGroups)
+    ? record.pausedGroups.filter(
+        (group): group is string => typeof group === 'string'
+      )
+    : null;
+
+  const remainingByGroup: Record<string, number> = {
+    ...(existing?.remainingByGroup ?? base?.remainingByGroup ?? {}),
+  };
+
+  if (isRecord(record.remainingByGroup)) {
+    for (const [group, value] of Object.entries(record.remainingByGroup)) {
+      const seconds = toFinite(value);
+
+      if (seconds === null || seconds < 0) continue;
+
+      remainingByGroup[group] = seconds;
+    }
+  }
+
+  return {
+    active: existing
+      ? existing.active
+      : typeof record.active === 'boolean'
+        ? record.active
+        : (base?.active ?? false),
+    pausedGroups: existing
+      ? existing.pausedGroups
+      : (pausedGroupsFromPatch ?? base?.pausedGroups ?? []),
+    remainingSeconds: existing
+      ? existing.remainingSeconds
+      : (toFinite(record.remainingSeconds) ?? base?.remainingSeconds ?? null),
+    remainingByGroup,
+    message: existing
+      ? existing.message
+      : typeof record.message === 'string'
+        ? record.message
+        : (base?.message ?? null),
+    waterLevel: existing
+      ? existing.waterLevel
+      : (toFinite(record.waterLevel) ?? base?.waterLevel ?? null),
+    resumeThreshold: existing
+      ? existing.resumeThreshold
+      : (toFinite(record.resumeThreshold) ?? base?.resumeThreshold ?? null),
+    at: existing
+      ? existing.at
+      : typeof record.at === 'string'
+        ? record.at
+        : (base?.at ?? null),
+  };
+}
+
 /** อัปเดตค่าอากาศ (ส่งเฉพาะค่าที่เปลี่ยน) */
 export function updateWeather(patch: Partial<Weather>): Weather {
   const store = getStore();
 
-  // merge เฉพาะฟิลด์ที่ส่งมา → ค่าที่เคยได้รับค้างอยู่จนกว่าจะมีค่าใหม่ทับ
-  store.weather = { ...store.weather, ...patch };
+  // merge เฉพาะฟิลด์ที่เป็นตัวเลขจริง → ค่าที่เคยได้รับค้างอยู่จนกว่าจะมีค่าใหม่ทับ
+  // (ค่า null ที่หลุดเข้ามาต้องไม่ลบของเดิม)
+  store.weather = mergeWeatherNumbers(store.weather, patch);
   store.updatedAt = new Date().toISOString();
 
   return store.weather;
@@ -152,8 +295,10 @@ export function updateWeather(patch: Partial<Weather>): Weather {
 /** อัปเดตระดับน้ำในถังหลัก */
 export function updateWaterTank(patch: Partial<WaterTank>): WaterTank {
   const store = getStore();
+  const level = toFinite(patch.levelPercent);
 
-  store.waterTank = { ...store.waterTank, ...patch };
+  // null = ยังไม่มีค่าระดับน้ำ → คงค่าเดิมไว้ ไม่เขียนทับ
+  if (level !== null) store.waterTank.levelPercent = level;
   store.updatedAt = new Date().toISOString();
 
   return store.waterTank;
@@ -169,7 +314,7 @@ export function updateZoneValues(
 
   if (!zone) return undefined;
 
-  zone.values = { ...zone.values, ...values };
+  zone.values = mergeZoneValues(zone.values, values);
   store.updatedAt = new Date().toISOString();
 
   return zone;
@@ -349,7 +494,10 @@ export function getPumpCommandAt(): Partial<Record<ZoneId, number>> {
   return getStore().pumpCommandAt ?? {};
 }
 
-/** อัปเดต/ล้างแจ้งเตือน "พักรดน้ำรอเติมน้ำ" */
+/**
+ * อัปเดต/ล้างแจ้งเตือน "พักรดน้ำรอเติมน้ำ"
+ * ฟิลด์ที่เป็น null/หายไป (เช่น waterLevel ที่ engine ไม่ส่งมา) จะคงค่าเดิมไว้
+ */
 export function updatePumpAlert(patch: Partial<PumpAlert> | null): PumpAlert | null {
   const store = getStore();
 
@@ -359,18 +507,10 @@ export function updatePumpAlert(patch: Partial<PumpAlert> | null): PumpAlert | n
     return null;
   }
 
-  store.pumpAlert = {
-    active: false,
-    pausedGroups: [],
-    remainingSeconds: null,
-    remainingByGroup: {},
-    message: null,
-    waterLevel: null,
-    resumeThreshold: null,
-    at: new Date().toISOString(),
-    ...(store.pumpAlert ?? {}),
+  store.pumpAlert = mergePumpAlertFields(store.pumpAlert, {
     ...patch,
-  };
+    at: patch.at ?? new Date().toISOString(),
+  });
 
   return store.pumpAlert;
 }
@@ -434,77 +574,126 @@ export function exportSnapshot(): StoreSnapshot {
 }
 
 /**
- * คืนค่าจาก snapshot ที่เคยบันทึกไว้ (ใช้ตอน cold start)
+ * คืนค่าจาก snapshot ที่เคยบันทึกไว้ (ใช้ตอน cold start / sync จาก Firebase)
  * คืน true ถ้าใช้ snapshot ได้
+ *
+ * mode = 'overlay' (ค่าใหม่ที่ไม่ใช่ null ชนะ) เป็นค่าปกติ
+ * mode = 'fill'    เติมเฉพาะช่องที่ยังว่าง — ใช้ตอนจะเขียนทับที่เก็บถาวร
+ *                  เพื่อไม่ให้ข้อมูลที่ฝั่งนี้ยังไม่มีไปลบข้อมูลที่มีอยู่แล้ว
  */
-export function importSnapshot(raw: unknown): boolean {
-  if (!raw || typeof raw !== 'object') return false;
+export function importSnapshot(
+  raw: unknown,
+  options: { mode?: SnapshotMode } = {}
+): boolean {
+  if (!isRecord(raw)) return false;
 
   const snapshot = raw as Partial<StoreSnapshot>;
+  const mode: SnapshotMode = options.mode ?? 'overlay';
 
-  if (!snapshot.weather || typeof snapshot.weather !== 'object') return false;
+  // snapshot ที่ไม่มีฟิลด์ที่รู้จักเลย = อ่านผิดพลาด/ว่างเปล่า → ไม่ต้องแตะ store
+  const hasKnownField =
+    isRecord(snapshot.weather) ||
+    isRecord(snapshot.waterTank) ||
+    Array.isArray(snapshot.zones) ||
+    isRecord(snapshot.pumpAlert);
+
+  if (!hasKnownField) return false;
 
   const store = getStore();
 
-  store.weather = { ...initialWeather, ...snapshot.weather };
+  if (isRecord(snapshot.weather)) {
+    store.weather = mergeWeatherNumbers(store.weather, snapshot.weather, mode);
+  }
 
-  if (snapshot.waterTank && typeof snapshot.waterTank === 'object') {
-    store.waterTank = { ...initialWaterTank, ...snapshot.waterTank };
+  const tankLevel = isRecord(snapshot.waterTank)
+    ? toFinite(snapshot.waterTank.levelPercent)
+    : null;
+
+  if (
+    tankLevel !== null &&
+    (mode === 'overlay' || toFinite(store.waterTank.levelPercent) === null)
+  ) {
+    store.waterTank.levelPercent = tankLevel;
   }
 
   if (Array.isArray(snapshot.zones)) {
     for (const saved of snapshot.zones) {
-      const zone = store.zones.find((item) => item.id === saved?.id);
+      if (!isRecord(saved) || typeof saved.id !== 'string') continue;
+
+      const zone = store.zones.find((item) => item.id === saved.id);
 
       if (!zone) continue;
 
-      zone.values = { ...(saved.values ?? {}) };
-      zone.valves = { ...(saved.valves ?? {}) };
+      zone.values = mergeZoneValues(zone.values, saved.values, mode);
+
+      if (isRecord(saved.valves)) {
+        const valves: Record<string, boolean> = { ...(zone.valves ?? {}) };
+
+        for (const [key, value] of Object.entries(saved.valves)) {
+          if (typeof value !== 'boolean') continue;
+          if (mode === 'fill' && typeof valves[key] === 'boolean') continue;
+
+          valves[key] = value;
+        }
+
+        zone.valves = valves;
+      }
 
       if (typeof saved.pumpOn === 'boolean') zone.pumpOn = saved.pumpOn;
       if (typeof saved.valveId === 'number') zone.valveId = saved.valveId;
     }
   }
 
-  if (snapshot.pumpCommandAt && typeof snapshot.pumpCommandAt === 'object') {
-    store.pumpCommandAt = { ...snapshot.pumpCommandAt };
-  }
+  if (isRecord(snapshot.pumpCommandAt)) {
+    const merged: Partial<Record<ZoneId, number>> = {
+      ...(store.pumpCommandAt ?? {}),
+    };
 
-  if (snapshot.valveIntent && typeof snapshot.valveIntent === 'object') {
-    store.valveIntent = { ...snapshot.valveIntent };
-  }
+    for (const [key, value] of Object.entries(snapshot.pumpCommandAt)) {
+      const at = toFinite(value);
 
-  if (snapshot.pumpAlert && typeof snapshot.pumpAlert === 'object') {
-    const saved = snapshot.pumpAlert as Partial<PumpAlert>;
-    const remainingByGroup: Record<string, number> = {};
+      if (at === null) continue;
+      if (mode === 'fill' && typeof merged[key as ZoneId] === 'number') continue;
 
-    if (saved.remainingByGroup && typeof saved.remainingByGroup === 'object') {
-      for (const [group, value] of Object.entries(saved.remainingByGroup)) {
-        const seconds = toFinite(value);
-
-        if (seconds !== null && seconds >= 0) remainingByGroup[group] = seconds;
-      }
+      merged[key as ZoneId] = at;
     }
 
-    // snapshot อาจเขียนโดยโค้ดเวอร์ชันอื่น (เช่น เว็บ beta ที่ใช้ Firebase เดียวกัน)
-    // → เติมฟิลด์ที่หายให้ครบตามสัญญาของ PumpAlert ก่อนส่งออก API
-    store.pumpAlert = {
-      active: saved.active === true,
-      pausedGroups: Array.isArray(saved.pausedGroups)
-        ? saved.pausedGroups.filter(
-            (group): group is string => typeof group === 'string'
-          )
-        : [],
-      remainingSeconds: toFinite(saved.remainingSeconds),
-      remainingByGroup,
-      message: typeof saved.message === 'string' ? saved.message : null,
-      waterLevel: toFinite(saved.waterLevel),
-      resumeThreshold: toFinite(saved.resumeThreshold),
-      at: typeof saved.at === 'string' ? saved.at : null,
-    };
+    store.pumpCommandAt = merged;
   }
 
-  if (typeof snapshot.updatedAt === 'string') store.updatedAt = snapshot.updatedAt;
+  if (isRecord(snapshot.valveIntent)) {
+    const merged: Partial<Record<ZoneId, boolean>> = {
+      ...(store.valveIntent ?? {}),
+    };
+
+    for (const [key, value] of Object.entries(snapshot.valveIntent)) {
+      if (typeof value !== 'boolean') continue;
+      if (mode === 'fill' && typeof merged[key as ZoneId] === 'boolean') continue;
+
+      merged[key as ZoneId] = value;
+    }
+
+    store.valveIntent = merged;
+  }
+
+  // pumpAlert: null ใน Firebase = ไม่มีข้อมูล (ไม่ใช่ "ล้างแจ้งเตือน") → คงของเดิมไว้
+  if (isRecord(snapshot.pumpAlert)) {
+    store.pumpAlert = mergePumpAlertFields(
+      store.pumpAlert,
+      snapshot.pumpAlert,
+      mode
+    );
+  }
+
+  // updatedAt ใช้เป็นตัวตัดสินว่า snapshot ใหม่กว่าในหน่วยความจำหรือไม่ → ขยับไปข้างหน้าเท่านั้น
+  if (typeof snapshot.updatedAt === 'string') {
+    const incoming = Date.parse(snapshot.updatedAt);
+    const current = Date.parse(store.updatedAt);
+
+    if (Number.isFinite(incoming) && (!Number.isFinite(current) || incoming > current)) {
+      store.updatedAt = snapshot.updatedAt;
+    }
+  }
 
   return true;
 }
@@ -513,7 +702,7 @@ export function importSnapshot(raw: unknown): boolean {
 // ข้อมูลย้อนหลัง (Time-series)
 // ==============================
 
-function toFinite(value: number | null | undefined): number | null {
+function toFinite(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 

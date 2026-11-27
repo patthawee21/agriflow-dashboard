@@ -1,10 +1,11 @@
-import type { HistoryPoint, HistoryRange } from '../types/iot';
+import type { HistoryPoint, HistoryRange, Weather } from '../types/iot';
 
 import {
   exportSnapshot,
   getStore,
   hasLiveData,
   importSnapshot,
+  updateWeather,
 } from './store';
 import {
   firebaseEnabled,
@@ -45,6 +46,54 @@ export const persistenceMode = firebaseEnabled
 
 const requestTimeoutMs = 4000;
 
+/** ฟิลด์อากาศที่กู้คืนจากจุดข้อมูลย้อนหลังได้ */
+const WEATHER_HISTORY_KEYS = [
+  'temperatureC',
+  'humidity',
+  'etoMmPerDay',
+  'pressureHpa',
+  'solarRadiationWm2',
+  'windMs',
+] as const;
+
+/**
+ * เติมค่าอากาศที่หายไปจากจุดข้อมูลย้อนหลังล่าสุด
+ * เผื่อกรณี snapshot ล่าสุดถูกเขียนทับจนค่า ETo/ความกดอากาศหาย แต่ /history ยังมีอยู่
+ */
+async function backfillWeatherFromHistory(): Promise<void> {
+  if (!firebaseEnabled) return;
+
+  const store = getStore();
+  const missing = WEATHER_HISTORY_KEYS.filter((key) => {
+    const value = store.weather[key];
+
+    return !(typeof value === 'number' && Number.isFinite(value));
+  });
+
+  if (missing.length === 0) return;
+
+  const points = await readHistory('7d');
+
+  if (points.length === 0) return;
+
+  const patch: Partial<Weather> = {};
+
+  for (const key of missing) {
+    for (let index = points.length - 1; index >= 0; index -= 1) {
+      const value = points[index][key];
+
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        patch[key] = value;
+        break;
+      }
+    }
+  }
+
+  if (Object.keys(patch).length === 0) return;
+
+  updateWeather(patch);
+}
+
 function redisHeaders(): Record<string, string> {
   return { Authorization: `Bearer ${token}` };
 }
@@ -52,14 +101,17 @@ function redisHeaders(): Record<string, string> {
 /**
  * hydrate ครั้งเดียวต่อ process — เรียกก่อนอ่านค่าที่ API
  * คืน true ถ้าโหลด snapshot จากภายนอกสำเร็จ
+ *
+ * ใช้ mode 'fill' → เติมเฉพาะช่องที่ยังว่าง ค่าที่เพิ่งรับจาก telemetry ไม่ถูกทับ
  */
 let hydration: Promise<boolean> | null = null;
+let hydrated = false;
 
 export function hydrateStore(): Promise<boolean> {
   if (!persistenceEnabled) return Promise.resolve(false);
 
-  // มีข้อมูลสดอยู่แล้ว (เช่น telemetry เพิ่งยิงเข้ามา) → ไม่ต้องทับด้วยค่าเก่า
-  if (hasLiveData()) return Promise.resolve(false);
+  // โหลดครบแล้วครั้งเดียวพอ — หลังจากนี้ syncFromFirebase() ดูแลค่าที่ใหม่กว่า
+  if (hydrated) return Promise.resolve(false);
 
   if (!hydration) {
     hydration = (async () => {
@@ -67,7 +119,13 @@ export function hydrateStore(): Promise<boolean> {
         if (firebaseEnabled) {
           const remote = await readLatest();
 
-          if (remote && importSnapshot(remote)) return true;
+          if (remote && importSnapshot(remote, { mode: 'fill' })) {
+            hydrated = true;
+
+            await backfillWeatherFromHistory();
+
+            return true;
+          }
         }
 
         if (!redisEnabled) return false;
@@ -93,7 +151,15 @@ export function hydrateStore(): Promise<boolean> {
 
         if (!raw) return false;
 
-        return importSnapshot(JSON.parse(raw));
+        const ok = importSnapshot(JSON.parse(raw), { mode: 'fill' });
+
+        if (ok) {
+          hydrated = true;
+
+          await backfillWeatherFromHistory();
+        }
+
+        return ok;
       } catch {
         // อ่านไม่ได้ = ทำงานต่อด้วย in-memory (ไม่ทำให้ API ล้ม)
         return false;
@@ -172,6 +238,12 @@ export async function persistStore(point?: HistoryPoint): Promise<void> {
   if (!hasLiveData()) return;
 
   if (firebaseEnabled) {
+    // อ่านของเดิมใน Firebase มาเติมช่องที่ instance นี้ยังไม่มีก่อนเขียนทับ
+    // (instance ที่เพิ่งตื่นแล้วรับ telemetry มาแค่ไม่กี่ค่า ต้องไม่ลบข้อมูลเดิม)
+    const remote = await readLatest();
+
+    if (remote) importSnapshot(remote, { mode: 'fill' });
+
     // เคลียร์ cache เพื่อให้รอบถัดไปอ่านค่าที่เพิ่งเขียน
     latestCache = null;
 
