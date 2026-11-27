@@ -27,6 +27,16 @@ function groupLabel(group: string): string {
   return zone ?? group;
 }
 
+/**
+ * ค่าตัวเลขที่มาจาก payload ภายนอกอาจหายไป (undefined) หรือเป็น null
+ * → แสดงเฉพาะค่าที่เป็นตัวเลขจริง กัน .toFixed() ทำงานบน undefined
+ */
+function formatPercent(value: number | null | undefined): string | null {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value.toFixed(0)
+    : null;
+}
+
 /** วินาที → mm:ss หรือ h:mm:ss */
 function formatClock(totalSeconds: number): string {
   const safe = Math.max(0, Math.round(totalSeconds));
@@ -50,7 +60,11 @@ export default function PumpPauseAlert({ alert }: { alert: PumpAlert | null }) {
   // ยึดเวลาที่ได้รับแจ้งเป็นจุดเริ่มนับถอยหลัง
   const anchor = useMemo(
     () => ({
-      base: alert?.remainingSeconds ?? null,
+      base:
+        typeof alert?.remainingSeconds === 'number' &&
+        Number.isFinite(alert.remainingSeconds)
+          ? alert.remainingSeconds
+          : null,
       at: alert?.at ? new Date(alert.at).getTime() : Date.now(),
     }),
     [alert]
@@ -76,6 +90,10 @@ export default function PumpPauseAlert({ alert }: { alert: PumpAlert | null }) {
   // หลาย group อาจเป็นแปลงเดียวกัน (วาล์ว 4 ร่วมกัน) → แสดงชื่อแปลงครั้งเดียว
   const groups = Array.from(new Set(alert.pausedGroups.map(groupLabel))).join(' · ');
 
+  // ฟิลด์เหล่านี้อาจไม่มีใน payload ที่ hydrate จาก Firebase เวอร์ชันเก่า
+  const waterLevelText = formatPercent(alert.waterLevel);
+  const resumeThresholdText = formatPercent(alert.resumeThreshold);
+
   return (
     <div className="pump-alert" role="alert" aria-live="assertive">
       <div className="pump-alert-icon">
@@ -87,14 +105,14 @@ export default function PumpPauseAlert({ alert }: { alert: PumpAlert | null }) {
 
         <span className="pump-alert-detail">
           {groups}
-          {alert.waterLevel !== null && (
+          {waterLevelText !== null && (
             <>
               {' '}
-              · น้ำปัจจุบัน <b>{alert.waterLevel.toFixed(0)}%</b>
+              · น้ำปัจจุบัน <b>{waterLevelText}%</b>
             </>
           )}
-          {alert.resumeThreshold !== null && (
-            <> · จะรดต่อเมื่อน้ำเกิน {alert.resumeThreshold.toFixed(0)}%</>
+          {resumeThresholdText !== null && (
+            <> · จะรดต่อเมื่อน้ำเกิน {resumeThresholdText}%</>
           )}
         </span>
 
