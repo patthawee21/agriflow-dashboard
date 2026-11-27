@@ -25,6 +25,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    logEvent('pump.reject', 'ack: body ไม่ใช่ JSON object', { body });
+
+    return NextResponse.json(
+      { error: 'body ต้องเป็น JSON object เช่น { "commandId": "cmd_ab12cd34" }' },
+      { status: 400 }
+    );
+  }
+
   if (typeof body.commandId !== 'string' || body.commandId.trim() === '') {
     logEvent('pump.reject', 'ack: ไม่มี commandId');
 

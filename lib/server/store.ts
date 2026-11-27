@@ -131,6 +131,14 @@ export function getStore(): FarmStore {
   if (!store.valveIntent) store.valveIntent = {};
   if (!Array.isArray(store.history)) store.history = [];
 
+  // store ที่สร้างจากโค้ดเวอร์ชันเก่า/ถูกเขียนทับผิดรูป → สร้างชุดแปลงใหม่
+  if (!Array.isArray(store.zones)) {
+    store.zones = initialZones.map((zone) => ({
+      ...zone,
+      values: { ...zone.values },
+    }));
+  }
+
   for (const zone of store.zones) {
     if (typeof zone.valveId !== 'number') zone.valveId = ZONE_VALVE_IDS[zone.id];
   }

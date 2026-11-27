@@ -19,6 +19,13 @@ interface DataStorageProps {
   pumpLogs?: PumpLog[];
 }
 
+/** ค่าที่รับมาจาก API/localStorage อาจเป็น null → แสดง -- แทน NaN */
+function numeric(value: unknown, digits = 1): string {
+  const number = Number(value);
+
+  return Number.isFinite(number) ? number.toFixed(digits) : '--';
+}
+
 export default function DataStorage({ history = [], pumpLogs = [] }: DataStorageProps) {
   const [dataType, setDataType] = useState('sensors');
   const [search, setSearch] = useState('');
@@ -306,15 +313,15 @@ export default function DataStorage({ history = [], pumpLogs = [] }: DataStorage
               <tbody>
                 {filteredSensors.length > 0 ? (
                   [...filteredSensors].reverse().map((item, index) => (
-                    <tr key={`${item.timestamp.getTime()}-${index}`}>
+                    <tr key={`${new Date(item.timestamp).getTime()}-${index}`}>
                       <td>
                         {item.timestamp
                           ? new Date(item.timestamp).toLocaleString('th-TH')
                           : item.time}
                       </td>
-                      <td>{Number(item.temperature).toFixed(1)} °C</td>
-                      <td>{Number(item.humidity).toFixed(1)} %RH</td>
-                      <td>{Number(item.etoMmPerDay).toFixed(1)} mm/วัน</td>
+                      <td>{numeric(item.temperature)} °C</td>
+                      <td>{numeric(item.humidity)} %RH</td>
+                      <td>{numeric(item.etoMmPerDay)} mm/วัน</td>
                     </tr>
                   ))
                 ) : (

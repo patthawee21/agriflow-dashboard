@@ -136,11 +136,16 @@ export default function Dashboard() {
         return;
       }
 
+      // API อาจตอบฟิลด์ใดฟิลด์หนึ่งหายไป (เช่นตอน rollback/instance เก่า)
+      // → ใช้ค่าที่ปลอดภัยแทนการอ่าน property ของ undefined (เคยทำให้หน้าล่มทั้งหน้า)
+      const nextWeather = snapshot.weather ?? EMPTY_WEATHER;
+      const nextZones = Array.isArray(snapshot.zones) ? snapshot.zones : [];
+
       setDeviceOnline(true);
-      setWeather(snapshot.weather);
+      setWeather(nextWeather);
       setWaterTank(snapshot.waterTank ?? null);
-      setZones(snapshot.zones);
-      setPumpOn(snapshot.zones.some((zone) => zone.pumpOn));
+      setZones(nextZones);
+      setPumpOn(nextZones.some((zone) => zone.pumpOn === true));
       setPumpAlert(snapshot.pumpAlert ?? null);
 
       const parsedTime = new Date(snapshot.updatedAt);
@@ -151,7 +156,7 @@ export default function Dashboard() {
       setLastUpdated(now);
 
       // บันทึกประวัติ (ข้ามรอบที่ค่าไม่เปลี่ยน / ข้ามถ้ายังไม่เคยได้รับค่าจริง)
-      const { temperatureC, humidity, etoMmPerDay } = snapshot.weather;
+      const { temperatureC, humidity, etoMmPerDay } = nextWeather;
 
       if (
         temperatureC !== null &&

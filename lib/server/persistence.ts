@@ -232,8 +232,20 @@ export async function readFirebaseHistory(
   return points.length > 0 ? points : null;
 }
 
-/** เขียน snapshot ล่าสุด + จุดข้อมูลย้อนหลังลงที่เก็บถาวร */
+/**
+ * เขียน snapshot ล่าสุด + จุดข้อมูลย้อนหลังลงที่เก็บถาวร
+ * ห้าม throw ออกมา — ถูกเรียกแบบ fire-and-forget (void) จาก route handler
+ * ถ้าปล่อย reject จะกลายเป็น unhandled rejection ของ process
+ */
 export async function persistStore(point?: HistoryPoint): Promise<void> {
+  try {
+    await writeSnapshot(point);
+  } catch {
+    // เขียนไม่ได้ก็ไม่เป็นไร — ค่ายังอยู่ใน memory ของ instance นี้
+  }
+}
+
+async function writeSnapshot(point?: HistoryPoint): Promise<void> {
   if (!persistenceEnabled) return;
   if (!hasLiveData()) return;
 

@@ -109,6 +109,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
+  // body เป็น null/array/ตัวเลข (JSON ถูกต้องแต่ไม่ใช่วัตถุ) → อย่าให้อ่านฟิลด์แล้ว throw
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    logEvent('pump.reject', 'body ไม่ใช่ JSON object', { body });
+
+    return NextResponse.json(
+      { error: 'body ต้องเป็น JSON object เช่น { "zone": "herb", "state": true }' },
+      { status: 400 }
+    );
+  }
+
   if (!ZONE_IDS.includes(body.zone as ZoneId)) {
     logEvent('pump.reject', 'zone ไม่ถูกต้อง', body);
 

@@ -116,6 +116,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
+  // JSON ที่ถูกต้องแต Express เป็น null/array/ตัวเลข → อ่านฟิลด์ไม่ได้ (กัน 500)
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    logEvent('telemetry.reject', 'body ไม่ใช่ JSON object', { body });
+
+    return NextResponse.json(
+      { error: 'body ต้องเป็น JSON object เช่น { "temperature": 29.5 }' },
+      { status: 400 }
+    );
+  }
+
   // log ทุกครั้งที่ Node-RED/ESP32 ยิงเข้ามา (ดูได้ที่ /api/debug/logs)
   logEvent('telemetry.in', 'POST /api/sensors/telemetry', {
     source: request.headers.get('user-agent') ?? '-',

@@ -31,7 +31,7 @@ function getValue(
 ): number | null {
   const value = getZone(zones, id)?.values[key];
 
-  return typeof value === 'number' ? value : null;
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 function fmt(value: number | null, digits = 1): string {

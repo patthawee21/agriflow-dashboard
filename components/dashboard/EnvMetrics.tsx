@@ -49,7 +49,7 @@ const STATUS_LABEL: Record<StatusTone, string> = {
 };
 
 function format(value: number | null, digits: number): string {
-  if (value === null) return '--';
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
 
   return value.toFixed(digits);
 }
