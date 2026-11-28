@@ -28,6 +28,21 @@ export interface ZoneConfig {
   valveId: number;
 }
 
+/**
+ * เวลารดน้ำต่อรอบของแต่ละวาล์ว ตามที่ตั้งไว้ใน Logic ของ Pump Engine (วินาที)
+ * valve 2 = 600 (10 นาที) · valve 3 = 5280 (88 นาที) · valve 4 = 1200 (20 นาที)
+ */
+export const VALVE_RUNTIME_SECONDS: Record<number, number> = {
+  2: 600,
+  3: 5280,
+  4: 1200,
+};
+
+/** เวลารดน้ำต่อรอบของวาล์ว (0 = ไม่รู้จักวาล์วนี้) */
+export function getValveRuntimeSeconds(valveId: number): number {
+  return VALVE_RUNTIME_SECONDS[valveId] ?? 0;
+}
+
 /** ค่าคอนฟิกของแปลงเดียว */
 export function getZoneConfig(zone: ZoneId): ZoneConfig {
   return { groupId: ZONE_GROUP_IDS[zone], valveId: ZONE_VALVE_IDS[zone] };

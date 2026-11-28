@@ -633,6 +633,23 @@ export function exportSnapshot(): StoreSnapshot {
 }
 
 /**
+ * คำสั่งของเครื่องนี้ใหม่กว่า snapshot ที่กำลังนำเข้าไหม
+ * (snapshot จาก instance อื่น/Firebase อาจยังไม่รู้คำสั่งล่าสุด → ต้องไม่ทับ)
+ */
+function hasNewerLocalCommand(
+  zoneId: string,
+  snapshotCommandAt: Record<string, unknown>
+): boolean {
+  const local = toFinite(getStore().pumpCommandAt?.[zoneId as ZoneId]);
+
+  if (local === null) return false;
+
+  const remote = toFinite(snapshotCommandAt[zoneId]);
+
+  return remote === null || local > remote;
+}
+
+/**
  * คืนค่าจาก snapshot ที่เคยบันทึกไว้ (ใช้ตอน cold start / sync จาก Firebase)
  * คืน true ถ้าใช้ snapshot ได้
  *
@@ -648,6 +665,12 @@ export function importSnapshot(
 
   const snapshot = raw as Partial<StoreSnapshot>;
   const mode: SnapshotMode = options.mode ?? 'overlay';
+
+  // snapshot อาจถูกเขียนโดย instance อื่นที่ยังไม่รู้คำสั่งล่าสุดของเครื่องนี้
+  // → คำสั่งที่ใหม่กว่าต้องชนะ ไม่งั้นการ์ดขึ้น "หยุดทำงาน" ทั้งที่ปั๊มยังทำงาน
+  const snapshotCommandAt = isRecord(snapshot.pumpCommandAt)
+    ? snapshot.pumpCommandAt
+    : {};
 
   // snapshot ที่ไม่มีฟิลด์ที่รู้จักเลย = อ่านผิดพลาด/ว่างเปล่า → ไม่ต้องแตะ store
   const hasKnownField =
@@ -720,7 +743,12 @@ export function importSnapshot(
         zone.valves = valves;
       }
 
-      if (typeof saved.pumpOn === 'boolean') zone.pumpOn = saved.pumpOn;
+      if (
+        typeof saved.pumpOn === 'boolean' &&
+        !hasNewerLocalCommand(saved.id, snapshotCommandAt)
+      ) {
+        zone.pumpOn = saved.pumpOn;
+      }
       if (typeof saved.valveId === 'number') zone.valveId = saved.valveId;
     }
   }
@@ -749,6 +777,7 @@ export function importSnapshot(
 
     for (const [key, value] of Object.entries(snapshot.valveIntent)) {
       if (typeof value !== 'boolean') continue;
+      if (hasNewerLocalCommand(key, snapshotCommandAt)) continue;
       if (mode === 'fill' && typeof merged[key as ZoneId] === 'boolean') continue;
 
       merged[key as ZoneId] = value;
@@ -756,6 +785,9 @@ export function importSnapshot(
 
     store.valveIntent = merged;
   }
+
+  // หลังรวมความตั้งใจแล้ว ให้ pumpOn ของวาล์วที่ใช้ร่วมกันตรงกันทั้งชุด
+  if (Array.isArray(snapshot.zones)) reconcileSharedValves();
 
   // pumpAlert: null ใน Firebase = ไม่มีข้อมูล (ไม่ใช่ "ล้างแจ้งเตือน") → คงของเดิมไว้
   if (isRecord(snapshot.pumpAlert)) {

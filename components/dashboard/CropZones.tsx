@@ -1,9 +1,11 @@
+'use client';
+
 import { Power } from 'lucide-react';
 
 import SectionHeader from './SectionHeader';
 
 import type { Zone, ZoneId, ZoneValues } from '../../lib/types/iot';
-import { getZoneConfig } from '../../lib/zoneConfig';
+import { getValveRuntimeSeconds, getZoneConfig } from '../../lib/zoneConfig';
 
 interface CropZonesProps {
   zones: Zone[];
@@ -38,6 +40,17 @@ function fmt(value: number | null, digits = 1): string {
   return value === null ? '--' : value.toFixed(digits);
 }
 
+/** วินาที → HH:MM:SS */
+function formatRuntime(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+
+  return [hours, minutes, total % 60]
+    .map((value) => String(value).padStart(2, '0'))
+    .join(':');
+}
+
 function anyPumpOn(zones: Zone[], ids: ZoneId[]): boolean {
   return ids.some((id) => getZone(zones, id)?.pumpOn === true);
 }
@@ -63,6 +76,7 @@ function CropCard({
   status,
   metrics,
   pumpOn,
+  runtimeSeconds,
   busy,
   wide = false,
   onToggle,
@@ -75,6 +89,8 @@ function CropCard({
   status: { tone: CropTone; label: string };
   metrics: CropMetric[];
   pumpOn: boolean;
+  /** เวลารดน้ำต่อรอบของวาล์วนี้ ตามที่ตั้งไว้ใน Logic (วินาที) */
+  runtimeSeconds: number;
   busy: boolean;
   wide?: boolean;
   onToggle: () => void;
@@ -126,6 +142,16 @@ function CropCard({
             <Power size={15} strokeWidth={2.2} />
             {busy ? 'กำลังสั่ง…' : pumpOn ? 'ปิดปั๊มน้ำ' : 'เปิดปั๊มน้ำ'}
           </button>
+
+          {/* สถานะปั๊ม + เวลารดน้ำต่อรอบจาก Logic — เห็นชัดว่ากำลังทำงานหรือหยุดอยู่ */}
+          <div className={`crop-runtime ${pumpOn ? 'is-on' : ''}`}>
+            <span className="crop-runtime-state">
+              <i />
+              {pumpOn ? 'กำลังทำงาน' : 'หยุดทำงาน'}
+            </span>
+            <strong>{formatRuntime(runtimeSeconds)}</strong>
+            <span className="crop-runtime-note">เวลารดน้ำ · Logic</span>
+          </div>
         </div>
       </div>
     </article>
@@ -181,6 +207,7 @@ export default function CropZones({
           valveId={getZoneConfig('herb').valveId}
           status={statusOne}
           pumpOn={zoneOneOn}
+          runtimeSeconds={getValveRuntimeSeconds(getZoneConfig('herb').valveId)}
           busy={busyZone === 'herb'}
           onToggle={() => onTogglePump('herb')}
           metrics={[
@@ -200,6 +227,7 @@ export default function CropZones({
           valveId={getZoneConfig('rice').valveId}
           status={statusTwo}
           pumpOn={zoneTwoOn}
+          runtimeSeconds={getValveRuntimeSeconds(getZoneConfig('rice').valveId)}
           busy={busyZone === 'rice'}
           onToggle={() => onTogglePump('rice')}
           metrics={[
@@ -224,6 +252,9 @@ export default function CropZones({
           valveId={getZoneConfig('sunnhemp').valveId}
           status={statusThree}
           pumpOn={zoneThreeOn}
+          runtimeSeconds={getValveRuntimeSeconds(
+            getZoneConfig('sunnhemp').valveId
+          )}
           busy={busyZone === 'sunnhemp'}
           wide
           onToggle={() => onTogglePump('sunnhemp', 'valve')}

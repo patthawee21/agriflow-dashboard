@@ -834,9 +834,73 @@
 
 .crop-action {
   display: flex;
-  justify-content: center;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
   margin-top: auto;
   padding-top: 4px;
+}
+
+/* สถานะปั๊ม + Runtime วันนี้ ของการ์ดแต่ละแปลง */
+.crop-runtime {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: #7d8c83;
+  font-size: 11px;
+}
+
+.crop-runtime-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+  color: #98a59d;
+}
+
+.crop-runtime-state i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #c4cfc8;
+}
+
+.crop-runtime strong {
+  font-size: 15px;
+  letter-spacing: 0.2px;
+  color: #53675b;
+  font-variant-numeric: tabular-nums;
+}
+
+.crop-runtime-note {
+  font-size: 10.5px;
+  color: #a2aea6;
+}
+
+.crop-runtime.is-on .crop-runtime-state {
+  color: #1f7d53;
+}
+
+.crop-runtime.is-on .crop-runtime-state i {
+  background: #2aa06c;
+  box-shadow: 0 0 0 3px rgba(42, 160, 108, 0.16);
+  animation: pump-runtime-pulse 1.6s ease-in-out infinite;
+}
+
+.crop-runtime.is-on strong {
+  color: #1b6b49;
+}
+
+@keyframes pump-runtime-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
 }
 
 .crop-pump {

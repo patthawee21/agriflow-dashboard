@@ -26,6 +26,10 @@ import type {
 // ดึงข้อมูลจาก backend เป็นรอบ (แก้ตัวเลขนี้ถ้าต้องการถี่ขึ้น/ห่างขึ้น)
 const POLL_INTERVAL_MS = 10000;
 
+// หลังสั่งเปิด/ปิดปั๊ม ให้ยึดสถานะที่สั่งไว้ช่วงสั้น ๆ
+// กัน snapshot เก่าจาก server/instance อื่นมาทับ แล้วการ์ดขึ้น "หยุดทำงาน" ทั้งที่ปั๊มยังทำงาน
+const PUMP_COMMAND_HOLD_MS = 90000;
+
 // ยังไม่ได้รับค่า → null (แสดง "--" ไม่ใช่ 0)
 const EMPTY_WEATHER: Weather = {
   temperatureC: null,
@@ -86,6 +90,9 @@ export default function Dashboard() {
   const [lora, setLora] = useState<LoraSignal | null>(null);
   const [zones, setZones] = useState<Zone[]>([]);
   const [busyZone, setBusyZone] = useState<ZoneId | null>(null);
+
+  // สถานะที่เพิ่งสั่ง + เวลาที่สั่ง (กัน poll รอบถัดไปทับด้วยค่าเก่า)
+  const pumpCommandHold = useRef(new Map<ZoneId, { on: boolean; at: number }>());
   // คำเตือนเมื่อสั่งปิดวาล์วที่แปลงอื่นยังใช้อยู่
   const [valveWarning, setValveWarning] = useState<{
     title: string;
@@ -144,12 +151,29 @@ export default function Dashboard() {
       const nextWeather = snapshot.weather ?? EMPTY_WEATHER;
       const nextZones = Array.isArray(snapshot.zones) ? snapshot.zones : [];
 
+      // snapshot ที่ยังไม่รู้คำสั่งล่าสุดห้ามทับสถานะที่เพิ่งสั่ง
+      // (ค่าเดียวกันแล้ว/พ้นเวลายึดแล้ว = ปล่อยให้ค่าจาก server ชนะตามปกติ)
+      const nowMs = Date.now();
+      const heldZones = nextZones.map((zone) => {
+        const hold = pumpCommandHold.current.get(zone.id);
+
+        if (!hold) return zone;
+
+        if (nowMs - hold.at > PUMP_COMMAND_HOLD_MS || zone.pumpOn === hold.on) {
+          pumpCommandHold.current.delete(zone.id);
+
+          return zone;
+        }
+
+        return { ...zone, pumpOn: hold.on };
+      });
+
       setDeviceOnline(true);
       setWeather(nextWeather);
       setWaterTank(snapshot.waterTank ?? null);
       setLora(snapshot.lora ?? null);
-      setZones(nextZones);
-      setPumpOn(nextZones.some((zone) => zone.pumpOn === true));
+      setZones(heldZones);
+      setPumpOn(heldZones.some((zone) => zone.pumpOn === true));
       setPumpAlert(snapshot.pumpAlert ?? null);
 
       const parsedTime = new Date(snapshot.updatedAt);
@@ -289,6 +313,16 @@ export default function Dashboard() {
       });
     } else if (result.ok && result.zones) {
       setValveWarning(null);
+
+      // ยึดสถานะที่เพิ่งสั่งไว้ 90 วิ — poll ที่อ่านค่าเก่าจะไม่ทำให้การ์ดกลับเป็น "หยุดทำงาน"
+      const commandAt = Date.now();
+
+      for (const item of result.zones) {
+        pumpCommandHold.current.set(item.id, {
+          on: item.pumpOn,
+          at: commandAt,
+        });
+      }
 
       // API คืนทุกแปลงที่ใช้วาล์วร่วมกัน → การ์ดทุกใบอัปเดตพร้อมกัน
       const byId = new Map(result.zones.map((item) => [item.id, item]));
