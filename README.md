@@ -347,7 +347,7 @@ API ต้นทาง ──GET /api/sensors/latest──▶ merge กับค
 ```
 
 ```bash
-AGRIFLOW_SOURCE_URL=https://smart-irrigation-web-beta.vercel.app  # ค่าเริ่มต้น
+AGRIFLOW_SOURCE_URL=https://agriflow-dashboard.vercel.app  # ค่าเริ่มต้น
 AGRIFLOW_SOURCE_SYNC_MS=60000   # ดึงไม่เกิน 1 ครั้ง/นาที (ต่ำสุด 5000)
 AGRIFLOW_SOURCE_URL=            # ตั้งเป็นค่าว่าง = ปิดการดึงข้อมูล
 ```

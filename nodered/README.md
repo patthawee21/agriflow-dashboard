@@ -21,7 +21,7 @@
 1. Node-RED → เมนู ☰ → **Import** → เลือกไฟล์ `valve-control-flow.json` → Import
 2. เปิด node **MQTT broker** (ชื่อ `AgriFlow Broker`) ใส่ username/password ของ broker
    `13.212.181.250:1883`
-3. แก้ URL ใน 3 node HTTP Request ถ้าโดเมนเว็บไม่ใช่ `https://smart-irrigation-web-beta.vercel.app`
+3. แก้ URL ใน 3 node HTTP Request ถ้าโดเมนเว็บไม่ใช่ `https://agriflow-dashboard.vercel.app`
    - `GET /api/control/pump/pending`
    - `POST /api/sensors/telemetry`
    - `POST /api/control/pump/ack`
@@ -71,7 +71,7 @@ curl -X POST http://13.212.181.250:1880/api/irrigation/valve \
   -d '{"group_id":"group2","request":true,"valve_id":2,"zone":"herb"}'
 
 # 2) ดูว่าเว็บรับสถานะแล้ว
-curl https://smart-irrigation-web-beta.vercel.app/api/sensors/latest
+curl https://agriflow-dashboard.vercel.app/api/sensors/latest
 # ควรเห็น "valveStatus": { "herb": { "groupId":"group2", "valves": { "2": true } } }
 
 # 3) สั่งปิด

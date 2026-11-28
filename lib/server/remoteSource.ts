@@ -20,12 +20,12 @@ import { appendHistoryPoint, exportSnapshot, importSnapshot } from './store';
  * ที่เซนเซอร์ตัวหนึ่งยังไม่ส่ง (ค่าที่หายจะไม่ถูกเขียนทับด้วย null)
  *
  * ตั้งค่า
- *   AGRIFLOW_SOURCE_URL=https://smart-irrigation-web-beta.vercel.app
+ *   AGRIFLOW_SOURCE_URL=https://agriflow-dashboard.vercel.app
  *   AGRIFLOW_SOURCE_SYNC_MS=60000            (อย่างน้อย 5000)
  *   AGRIFLOW_SOURCE_URL= (ค่าว่าง)            → ปิดการดึงข้อมูล
  */
 
-const DEFAULT_SOURCE_URL = 'https://smart-irrigation-web-beta.vercel.app';
+const DEFAULT_SOURCE_URL = 'https://agriflow-dashboard.vercel.app';
 
 const rawSourceUrl = process.env.AGRIFLOW_SOURCE_URL;
 

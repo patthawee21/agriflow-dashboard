@@ -4,7 +4,7 @@
 > จำนวน: **3 tab / 90 โหนด** — `Flow 1` (ว่าง), `Flow 2` (ใช้งานหลัก), `Flow 3` (ทดสอบ)
 
 Repository เว็บ: <https://github.com/67010206-prog/smart-irrigation-web>
-เว็บที่ deploy: <https://smart-irrigation-web-beta.vercel.app>
+เว็บที่ deploy: <https://agriflow-dashboard.vercel.app>
 
 ---
 
@@ -208,12 +208,12 @@ curl -X POST http://13.212.181.250:1880/api/irrigation/control \
   -d '{"group_id":"node2","temperature":30,"humidity":60}'
 
 # 3) ยิงระดับน้ำเข้าถังตรงไปที่เว็บ
-curl -X POST https://smart-irrigation-web-beta.vercel.app/api/sensors/telemetry \
+curl -X POST https://agriflow-dashboard.vercel.app/api/sensors/telemetry \
   -H "Content-Type: application/json" \
   -d '{"tankWaterLevelPercent":75}'
 
 # 4) ดูค่าที่เว็บถืออยู่
-curl https://smart-irrigation-web-beta.vercel.app/api/sensors/latest
+curl https://agriflow-dashboard.vercel.app/api/sensors/latest
 ```
 
 > Node-RED Admin API (ต้องมี token):

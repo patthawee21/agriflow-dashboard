@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "AgriFlow Valve Bridge",
     "disabled": false,
-    "info": "รับคำสั่งจากเว็บ (valve_id) → MQTT pump/request/<sensorGroup> → รายงาน valveStatus กลับ /api/sensors/telemetry\nแก้ URL เว็บที่ node HTTP Request ทั้ง 3 ตัว (ค่าเริ่มต้น: https://smart-irrigation-web-beta.vercel.app)"
+    "info": "รับคำสั่งจากเว็บ (valve_id) → MQTT pump/request/<sensorGroup> → รายงาน valveStatus กลับ /api/sensors/telemetry\nแก้ URL เว็บที่ node HTTP Request ทั้ง 3 ตัว (ค่าเริ่มต้น: https://agriflow-dashboard.vercel.app)"
   },
   {
     "id": "af_broker",
@@ -141,7 +141,7 @@
     "method": "GET",
     "ret": "obj",
     "paytoqs": "ignore",
-    "url": "https://smart-irrigation-web-beta.vercel.app/api/control/pump/pending",
+    "url": "https://agriflow-dashboard.vercel.app/api/control/pump/pending",
     "tls": "",
     "persist": false,
     "proxy": "",
@@ -195,7 +195,7 @@
     "type": "function",
     "z": "af_valve_tab",
     "name": "Build ack",
-    "func": "/* เตรียม POST /api/control/pump/ack */\nif (!msg.payload || !msg.payload.commandId) return null;\n\nmsg.method = 'POST';\nmsg.headers = { 'Content-Type': 'application/json' };\nmsg.url = 'https://smart-irrigation-web-beta.vercel.app/api/control/pump/ack';\n\nreturn msg;",
+    "func": "/* เตรียม POST /api/control/pump/ack */\nif (!msg.payload || !msg.payload.commandId) return null;\n\nmsg.method = 'POST';\nmsg.headers = { 'Content-Type': 'application/json' };\nmsg.url = 'https://agriflow-dashboard.vercel.app/api/control/pump/ack';\n\nreturn msg;",
     "outputs": 1,
     "timeout": 0,
     "noerr": 0,
@@ -275,7 +275,7 @@
     "type": "function",
     "z": "af_valve_tab",
     "name": "Format Valve Status",
-    "func": "/* สร้าง payload ตามที่เว็บรับ:\n   { valveStatus: { zone:{groupId,valves:{\"2\":true}} }, pumpStatus: { group1:false, ... } }\n   อ่านสถานะจาก flow.valveStates ที่ Receive Valve Command เขียนไว้ */\nconst state = flow.get('valveStates') || {};\n\nconst on = (hw, valve) => Boolean(state[hw] && state[hw][valve]);\n\nconst valveStatus = {\n    herb:      { groupId: 'group2', valves: { '2': on('group2', 2) } },\n    rice:      { groupId: 'group5', valves: { '3': on('group3', 3) } },\n    sunnhemp:  { groupId: 'group3', valves: { '4': on('group4', 4) } },\n    sunflower: { groupId: 'group1', valves: { '4': on('group4', 4) } },\n    potted:    { groupId: 'group4', valves: { '4': on('group4', 4) } }\n};\n\nconst pumpStatus = {\n    group1: on('group4', 4), // sunflower\n    group2: on('group2', 2), // herb\n    group3: on('group4', 4), // sunnhemp\n    group4: on('group4', 4), // potted\n    group5: on('group3', 3)  // rice\n};\n\nnode.status({\n    fill: Object.values(pumpStatus).some(Boolean) ? 'green' : 'grey',\n    shape: 'dot',\n    text: 'ส่งสถานะวาล์วแล้ว'\n});\n\nmsg.method = 'POST';\nmsg.headers = { 'Content-Type': 'application/json' };\nmsg.url = 'https://smart-irrigation-web-beta.vercel.app/api/sensors/telemetry';\nmsg.payload = { valveStatus: valveStatus, pumpStatus: pumpStatus };\n\nreturn msg;",
+    "func": "/* สร้าง payload ตามที่เว็บรับ:\n   { valveStatus: { zone:{groupId,valves:{\"2\":true}} }, pumpStatus: { group1:false, ... } }\n   อ่านสถานะจาก flow.valveStates ที่ Receive Valve Command เขียนไว้ */\nconst state = flow.get('valveStates') || {};\n\nconst on = (hw, valve) => Boolean(state[hw] && state[hw][valve]);\n\nconst valveStatus = {\n    herb:      { groupId: 'group2', valves: { '2': on('group2', 2) } },\n    rice:      { groupId: 'group5', valves: { '3': on('group3', 3) } },\n    sunnhemp:  { groupId: 'group3', valves: { '4': on('group4', 4) } },\n    sunflower: { groupId: 'group1', valves: { '4': on('group4', 4) } },\n    potted:    { groupId: 'group4', valves: { '4': on('group4', 4) } }\n};\n\nconst pumpStatus = {\n    group1: on('group4', 4), // sunflower\n    group2: on('group2', 2), // herb\n    group3: on('group4', 4), // sunnhemp\n    group4: on('group4', 4), // potted\n    group5: on('group3', 3)  // rice\n};\n\nnode.status({\n    fill: Object.values(pumpStatus).some(Boolean) ? 'green' : 'grey',\n    shape: 'dot',\n    text: 'ส่งสถานะวาล์วแล้ว'\n});\n\nmsg.method = 'POST';\nmsg.headers = { 'Content-Type': 'application/json' };\nmsg.url = 'https://agriflow-dashboard.vercel.app/api/sensors/telemetry';\nmsg.payload = { valveStatus: valveStatus, pumpStatus: pumpStatus };\n\nreturn msg;",
     "outputs": 1,
     "timeout": 0,
     "noerr": 0,
