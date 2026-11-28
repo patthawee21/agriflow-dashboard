@@ -1,6 +1,7 @@
 import type {
   HistoryPoint,
   HistoryRange,
+  LoraSignal,
   PumpAlert,
   WaterTank,
   Weather,
@@ -26,6 +27,8 @@ import { ZONE_VALVE_IDS } from '../zoneConfig';
 interface FarmStore {
   weather: Weather;
   waterTank: WaterTank;
+  /** คุณภาพสัญญาณ LoRa ของรีซีฟเวอร์ (RSSI/SNR) */
+  lora: LoraSignal;
   zones: Zone[];
   updatedAt: string;
   /** เวลาที่สั่งปั๊มล่าสุดของแต่ละแปลง (ใช้กันสถานะจาก Node-RED ย้อนกลับมาทับ) */
@@ -56,6 +59,13 @@ const initialWeather: Weather = {
 
 const initialWaterTank: WaterTank = {
   levelPercent: null,
+};
+
+// ยังไม่ได้รับแพ็กเก็ต LoRa → ไม่มีค่า (แสดง "--")
+const initialLora: LoraSignal = {
+  rssi: null,
+  snr: null,
+  updatedAt: null,
 };
 
 // ค่าเริ่มต้นของ 5 แปลง (แก้ตัวเลขที่แสดงบนหน้าเว็บได้ที่นี่)
@@ -105,6 +115,7 @@ function createStore(): FarmStore {
   return {
     weather: { ...initialWeather },
     waterTank: { ...initialWaterTank },
+    lora: { ...initialLora },
     zones: initialZones.map((zone) => ({ ...zone, values: { ...zone.values } })),
     updatedAt: new Date().toISOString(),
     pumpCommandAt: {},
@@ -124,6 +135,9 @@ export function getStore(): FarmStore {
 
   // กันกรณี store ถูกสร้างจากโค้ดเวอร์ชันก่อนหน้า (dev hot reload) แล้วยังไม่มีฟิลด์ใหม่
   if (!store.waterTank) store.waterTank = { ...initialWaterTank };
+
+  // store เก่ายังไม่มีฟิลด์คุณภาพสัญญาณ LoRa
+  store.lora = { ...initialLora, ...store.lora };
 
   // เผื่อ store เก่ายังไม่มีฟิลด์สถานีอากาศที่เพิ่มใหม่
   store.weather = { ...initialWeather, ...store.weather };
@@ -310,6 +324,38 @@ export function updateWaterTank(patch: Partial<WaterTank>): WaterTank {
   store.updatedAt = new Date().toISOString();
 
   return store.waterTank;
+}
+
+/** ช่วงค่าที่เป็นไปได้จริงของลิงก์ LoRa — ค่าที่หลุดช่วงถือว่า "ไม่มีข้อมูล" */
+const RSSI_RANGE: [number, number] = [-200, 0];
+const SNR_RANGE: [number, number] = [-40, 40];
+
+function clampLora(value: unknown, [min, max]: [number, number]): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+
+  return value >= min && value <= max ? value : null;
+}
+
+/**
+ * อัปเดตคุณภาพสัญญาณ LoRa (RSSI/SNR) จากรีซีฟเวอร์
+ * ค่าที่หายไปหรือไม่ถูกต้อง → คงค่าเดิมไว้ (ไม่เขียน null ทับ)
+ */
+export function updateLoraSignal(patch: Partial<LoraSignal>): LoraSignal {
+  const store = getStore();
+  const rssi = clampLora(patch.rssi, RSSI_RANGE);
+  const snr = clampLora(patch.snr, SNR_RANGE);
+
+  if (rssi !== null) store.lora.rssi = rssi;
+  if (snr !== null) store.lora.snr = snr;
+
+  if (rssi !== null || snr !== null) {
+    const now = new Date().toISOString();
+
+    store.lora.updatedAt = now;
+    store.updatedAt = now;
+  }
+
+  return store.lora;
 }
 
 /** อัปเดตค่าของแปลงตาม id (ส่งเฉพาะค่าที่เปลี่ยน) */
@@ -540,11 +586,14 @@ export function hasLiveData(): boolean {
     typeof store.waterTank.levelPercent === 'number' &&
     Number.isFinite(store.waterTank.levelPercent);
 
+  const loraHasValue =
+    typeof store.lora?.rssi === 'number' || typeof store.lora?.snr === 'number';
+
   const zoneHasValue = store.zones.some(
     (zone) => Object.keys(zone.values ?? {}).length > 0
   );
 
-  return weatherHasValue || tankHasValue || zoneHasValue;
+  return weatherHasValue || tankHasValue || loraHasValue || zoneHasValue;
 }
 
 /** ก้อนข้อมูลที่บันทึกลงที่เก็บถาวร */
@@ -554,6 +603,7 @@ export interface StoreSnapshot {
   updatedAt: string;
   weather: Weather;
   waterTank: WaterTank;
+  lora: LoraSignal;
   zones: Zone[];
   pumpCommandAt: Partial<Record<ZoneId, number>>;
   valveIntent: Partial<Record<ZoneId, boolean>>;
@@ -570,6 +620,7 @@ export function exportSnapshot(): StoreSnapshot {
     updatedAt: store.updatedAt,
     weather: { ...store.weather },
     waterTank: { ...store.waterTank },
+    lora: { ...store.lora },
     zones: store.zones.map((zone) => ({
       ...zone,
       values: { ...(zone.values ?? {}) },
@@ -602,6 +653,7 @@ export function importSnapshot(
   const hasKnownField =
     isRecord(snapshot.weather) ||
     isRecord(snapshot.waterTank) ||
+    isRecord(snapshot.lora) ||
     Array.isArray(snapshot.zones) ||
     isRecord(snapshot.pumpAlert);
 
@@ -622,6 +674,27 @@ export function importSnapshot(
     (mode === 'overlay' || toFinite(store.waterTank.levelPercent) === null)
   ) {
     store.waterTank.levelPercent = tankLevel;
+  }
+
+  // ลิงก์ LoRa: เติมเฉพาะช่องว่างใน mode 'fill' (ค่าใหม่ชนะใน mode 'overlay')
+  if (isRecord(snapshot.lora)) {
+    const rssi = clampLora(snapshot.lora.rssi, RSSI_RANGE);
+    const snr = clampLora(snapshot.lora.snr, SNR_RANGE);
+
+    if (rssi !== null && (mode === 'overlay' || store.lora.rssi === null)) {
+      store.lora.rssi = rssi;
+    }
+
+    if (snr !== null && (mode === 'overlay' || store.lora.snr === null)) {
+      store.lora.snr = snr;
+    }
+
+    if (
+      (rssi !== null || snr !== null) &&
+      typeof snapshot.lora.updatedAt === 'string'
+    ) {
+      store.lora.updatedAt = snapshot.lora.updatedAt;
+    }
   }
 
   if (Array.isArray(snapshot.zones)) {
@@ -733,6 +806,9 @@ export function appendHistoryPoint(): HistoryPoint {
     solarRadiationWm2: toFinite(weather.solarRadiationWm2),
     windMs: toFinite(weather.windMs),
     vpdKpa: vaporPressureDeficit(weather.temperatureC, weather.humidity),
+    // คุณภาพสัญญาณของลิงก์ LoRa ที่รับแพ็กเก็ตนี้
+    rssi: toFinite(store.lora.rssi),
+    snr: toFinite(store.lora.snr),
   };
 
   const cutoff = Date.now() - HISTORY_RETENTION_MS;

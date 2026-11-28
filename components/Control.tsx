@@ -5,8 +5,10 @@ import EnvMetrics from './dashboard/EnvMetrics';
 import EnvChart from './dashboard/EnvChart';
 import CropZones from './dashboard/CropZones';
 import WaterSection from './dashboard/WaterSection';
+import LoraSignalSection from './dashboard/LoraSignal';
 
 import type {
+  LoraSignal,
   PumpAlert,
   WaterTank,
   Weather,
@@ -27,6 +29,8 @@ interface ControlProps {
   deviceOnline: boolean;
   /** สถานะพักรดน้ำรอเติมน้ำจาก Pump Logic Engine */
   pumpAlert?: PumpAlert | null;
+  /** คุณภาพสัญญาณ LoRa จากรีซีฟเวอร์ (RSSI/SNR) */
+  lora?: LoraSignal | null;
 }
 
 /**
@@ -47,6 +51,7 @@ export default function Control({
   lastUpdated,
   deviceOnline,
   pumpAlert = null,
+  lora = null,
 }: ControlProps) {
   const updatedLabel = lastUpdated.toLocaleTimeString('th-TH', {
     hour: '2-digit',
@@ -135,6 +140,8 @@ export default function Control({
         etoMmPerDay={weather.etoMmPerDay}
         rainfallMm={weather.rainfallMm ?? null}
       />
+
+      <LoraSignalSection lora={lora} />
 
       <div className="dash-footnote">
         AgriFlow Dashboard <span>·</span> Prototype สำหรับพัฒนาและทดสอบระบบ IoT

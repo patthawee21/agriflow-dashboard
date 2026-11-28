@@ -9,6 +9,7 @@ import {
   setZonePump,
   updatePumpAlert,
   updateWaterTank,
+  updateLoraSignal,
   updateWeather,
   updateZoneValues,
   updateZoneValves,
@@ -261,6 +262,33 @@ export async function POST(request: Request) {
     updateWaterTank({ levelPercent: waterTankPercent });
   }
 
+  // 2.5) คุณภาพสัญญาณ LoRa ของรีซีฟเวอร์ (Heltec V2) — rssi / snr
+  //      รับได้ทั้งแบบแบน { "rssi": -72, "snr": 8.5 } และแบบก้อน { "lora": { "rssi": ... } }
+  const loraRecord =
+    body.lora && typeof body.lora === 'object' && !Array.isArray(body.lora)
+      ? (body.lora as Record<string, unknown>)
+      : null;
+
+  const rssi = acceptInRange(
+    toNumber(body.rssi ?? body.RSSI ?? loraRecord?.rssi ?? loraRecord?.RSSI),
+    -200,
+    0,
+    'rssi'
+  );
+  const snr = acceptInRange(
+    toNumber(body.snr ?? body.SNR ?? loraRecord?.snr ?? loraRecord?.SNR),
+    -40,
+    40,
+    'snr'
+  );
+
+  // ค่าที่หาย/ไม่ถูกต้อง → ข้ามเฉพาะค่านั้น ค่าเดิมยังอยู่
+  if (rssi !== null || snr !== null) {
+    updateLoraSignal({ rssi, snr });
+
+    logEvent('lora.signal', 'อัปเดตคุณภาพสัญญาณ LoRa', { rssi, snr });
+  }
+
   // 3) ค่าของแต่ละแปลง (ไม่ส่งมาก็ได้ — รับได้ทั้ง object และ array)
   const zones = normalizeZones(body.zones);
 
@@ -365,6 +393,7 @@ export async function POST(request: Request) {
   const {
     weather,
     waterTank,
+    lora,
     zones: updatedZones,
     updatedAt,
   } = getStore();
@@ -378,6 +407,8 @@ export async function POST(request: Request) {
     windMs: weather.windMs,
     solarRadiationWm2: weather.solarRadiationWm2,
     rainfallMm: weather.rainfallMm,
+    loraRssi: lora.rssi,
+    loraSnr: lora.snr,
     tankWaterLevel: waterTank.levelPercent,
     zones: zones ? Object.keys(zones) : [],
     valves: valveChanges.length > 0 ? valveChanges : undefined,
@@ -453,6 +484,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     weather,
+    lora,
     tankWaterLevelPercent: waterTank.levelPercent,
     tankWaterLevel: waterTank.levelPercent,
     waterTank,

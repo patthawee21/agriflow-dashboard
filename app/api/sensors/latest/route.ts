@@ -120,7 +120,7 @@ export async function GET(request: Request) {
     ? ((await readFirebaseHistory(range)) ?? getHistory(range))
     : null;
 
-  const { weather, waterTank, zones, updatedAt, pumpAlert } = getStore();
+  const { weather, waterTank, lora, zones, updatedAt, pumpAlert } = getStore();
 
   // สถานะปั๊มแบบ group_id (ตรงกับที่ Node-RED ใช้) สำหรับฝั่งที่อ้าง group เป็นหลัก
   const pumpStatus: Record<string, boolean> = {};
@@ -149,6 +149,8 @@ export async function GET(request: Request) {
       tankWaterLevelPercent: waterTank.levelPercent,
       tankWaterLevel: waterTank.levelPercent,
       waterTank,
+      // คุณภาพสัญญาณ LoRa ของรีซีฟเวอร์ (RSSI/SNR)
+      lora,
       pumpStatus,
       valveStatus,
       // แจ้งเตือนเมื่อปั๊มพักรดน้ำรอเติมน้ำ (null = ไม่มี)

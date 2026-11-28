@@ -56,6 +56,20 @@ export interface WaterTank {
 }
 
 /**
+ * คุณภาพสัญญาณ LoRa ของรีซีฟเวอร์ (Heltec V2)
+ * เก็บเป็นข้อมูลของ "ลิงก์ LoRa" ที่รับแพ็กเก็ตนั้น ไม่ใช่ของเซนเซอร์แต่ละตัว
+ * null = ยังไม่เคยได้รับค่านี้
+ */
+export interface LoraSignal {
+  /** ความแรงสัญญาณ (dBm) — -30 ใกล้มาก, -120 อ่อนมาก */
+  rssi: number | null;
+  /** อัตราส่วนสัญญาณต่อสัญญาณรบกวน (dB) — ยิ่งมากยิ่งดี */
+  snr: number | null;
+  /** เวลาที่ได้รับค่าล่าสุด (ISO) */
+  updatedAt: string | null;
+}
+
+/**
  * สถานะ "พักรดน้ำรอเติมน้ำ" ที่ Pump Logic Engine (Node-RED) รายงานมา
  * active = true เมื่อมีกลุ่มที่ยังต้องการน้ำแต่ถูกหยุดชั่วคราวเพราะน้ำหมด
  */
@@ -91,6 +105,10 @@ export interface HistoryPoint {
   solarRadiationWm2: number | null;
   windMs: number | null;
   vpdKpa: number | null;
+  /** ความแรงสัญญาณ LoRa (dBm) */
+  rssi: number | null;
+  /** SNR ของลิงก์ LoRa (dB) */
+  snr: number | null;
 }
 
 /** ข้อมูลที่ GET /api/sensors/latest ตอบกลับ */
@@ -98,6 +116,8 @@ export interface FarmSnapshot {
   weather: Weather;
   zones: Zone[];
   waterTank: WaterTank;
+  /** คุณภาพสัญญาณ LoRa จากรีซีฟเวอร์ */
+  lora?: LoraSignal;
   /** แจ้งเตือนเมื่อปั๊มพักรอน้ำ (null = ไม่มี) */
   pumpAlert?: PumpAlert | null;
   /** สถานะวาล์วแยกตามแปลง */
@@ -118,6 +138,10 @@ export interface TelemetryPayload {
   light?: number;
   wind_speed?: number;
   solar_radiation?: number;
+  /** คุณภาพสัญญาณ LoRa — ส่งแบบแบนหรือในก้อน lora ก็ได้ */
+  rssi?: number;
+  snr?: number;
+  lora?: Partial<LoraSignal>;
   zones?: Partial<Record<ZoneId, ZoneValues>>;
   /** รายงานสถานะพักรอน้ำจาก Pump Logic Engine */
   pumpAlert?: Partial<Omit<PumpAlert, 'at'>> | null;

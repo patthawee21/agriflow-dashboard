@@ -12,6 +12,7 @@ import DebugLog from './DebugLog';
 import { fetchLatestSensors, setZonePumpState } from '../lib/services/api';
 
 import type {
+  LoraSignal,
   PageKey,
   PumpAlert,
   PumpLog,
@@ -81,6 +82,8 @@ export default function Dashboard() {
 
   const [weather, setWeather] = useState<Weather>(EMPTY_WEATHER);
   const [waterTank, setWaterTank] = useState<WaterTank | null>(null);
+  // คุณภาพสัญญาณ LoRa ของรีซีฟเวอร์ (RSSI/SNR)
+  const [lora, setLora] = useState<LoraSignal | null>(null);
   const [zones, setZones] = useState<Zone[]>([]);
   const [busyZone, setBusyZone] = useState<ZoneId | null>(null);
   // คำเตือนเมื่อสั่งปิดวาล์วที่แปลงอื่นยังใช้อยู่
@@ -144,6 +147,7 @@ export default function Dashboard() {
       setDeviceOnline(true);
       setWeather(nextWeather);
       setWaterTank(snapshot.waterTank ?? null);
+      setLora(snapshot.lora ?? null);
       setZones(nextZones);
       setPumpOn(nextZones.some((zone) => zone.pumpOn === true));
       setPumpAlert(snapshot.pumpAlert ?? null);
@@ -345,6 +349,7 @@ export default function Dashboard() {
             lastUpdated={lastUpdated}
             deviceOnline={deviceOnline}
             pumpAlert={pumpAlert}
+            lora={lora}
           />
         ) : page === 'docs' ? (
           <Docs />

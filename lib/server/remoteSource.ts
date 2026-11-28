@@ -1,5 +1,6 @@
 import type {
   HistoryPoint,
+  LoraSignal,
   PumpAlert,
   WaterTank,
   Weather,
@@ -67,6 +68,7 @@ interface RemoteLatest {
   weather?: unknown;
   waterTank?: unknown;
   tankWaterLevelPercent?: unknown;
+  lora?: unknown;
   zones?: unknown;
   pumpAlert?: unknown;
   updatedAt?: unknown;
@@ -132,6 +134,15 @@ function mergeSnapshot(remote: RemoteLatest) {
     }
   }
 
+  // ลิงก์ LoRa: ต้นทางส่งค่ามาเฉพาะเมื่อมี (null = ไม่มีข้อมูล → คงค่าเดิม)
+  const remoteLora = isRecord(remote.lora) ? remote.lora : {};
+  const lora: LoraSignal = { ...current.lora };
+  const remoteRssi = finiteNumber(remoteLora.rssi);
+  const remoteSnr = finiteNumber(remoteLora.snr);
+
+  if (remoteRssi !== null) lora.rssi = remoteRssi;
+  if (remoteSnr !== null) lora.snr = remoteSnr;
+
   // ต้นทางไม่ส่งแจ้งเตือนมา (null) ไม่ได้แปลว่า "ล้างแจ้งเตือน" → คงของเดิมไว้
   let pumpAlert: PumpAlert | null = current.pumpAlert;
 
@@ -154,6 +165,7 @@ function mergeSnapshot(remote: RemoteLatest) {
     updatedAt: remoteUpdatedAt,
     weather,
     waterTank,
+    lora,
     zones,
     pumpAlert,
   };

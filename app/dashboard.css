@@ -1188,3 +1188,144 @@
     margin-bottom: 26px;
   }
 }
+
+/* ---------- Section E · LoRa signal ---------- */
+
+.lora-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.lora-value-text {
+  font-size: 25px;
+  letter-spacing: -0.7px;
+}
+
+.env-status.is-idle {
+  background: #f3f6f3;
+  color: #85928a;
+}
+
+.lora-charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.lora-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: #fff;
+  border: 1px solid #e9eeea;
+  border-radius: 16px;
+  padding: 15px 18px 13px;
+  box-shadow: 0 1px 2px rgba(17, 45, 30, 0.03),
+    0 18px 36px -32px rgba(17, 45, 30, 0.4);
+}
+
+.lora-chart-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.lora-chart-head span {
+  font-size: 13px;
+  font-weight: 600;
+  color: #3b5044;
+}
+
+.lora-chart-head strong {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.7px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.lora-chart-head em {
+  margin-left: 5px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: #93a099;
+}
+
+.lora-chart-meta {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  flex-wrap: wrap;
+  margin: 3px 0 0;
+  font-size: 10.5px;
+  color: #9aa79f;
+}
+
+.lora-chart-meta b {
+  color: #40564a;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin-left: 2px;
+}
+
+.lora-chart-plot {
+  position: relative;
+  height: 118px;
+  margin-top: 10px;
+  border-left: 1px solid #eef2ef;
+  border-bottom: 1px solid #eef2ef;
+}
+
+.lora-chart-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.lora-chart-x {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 9.5px;
+  color: #a3aea6;
+  font-variant-numeric: tabular-nums;
+}
+
+.lora-chart-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 0 12px;
+  text-align: center;
+  font-size: 11px;
+  color: #a3aea6;
+}
+
+@media (max-width: 980px) {
+  .lora-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .lora-charts {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .lora-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .lora-value-text {
+    font-size: 22px;
+  }
+}
