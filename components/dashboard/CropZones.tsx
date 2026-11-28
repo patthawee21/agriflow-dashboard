@@ -18,6 +18,9 @@ interface CropZonesProps {
   pumpCommandAt?: Partial<Record<ZoneId, number>>;
 }
 
+/** เวลาเริ่มที่เก่ากว่ารอบเกินเท่านี้ = เชื่อไม่ได้ (ปั๊มอาจถูกเปิดจาก Node-RED) */
+const STALE_START_GRACE_SECONDS = 30 * 60;
+
 type CropTone = 'ok' | 'warn' | 'watering' | 'idle';
 
 interface CropMetric {
@@ -141,12 +144,30 @@ function CropCard({
 
   // นับจากเวลาที่ server สั่งเปิดจริง → เปิดหน้ากลางรอบก็ได้เลขที่ถูก
   const counting = pumpOn && startedAtMs !== null;
-  const elapsedSeconds =
-    pumpOn && startedAtMs !== null
-      ? Math.max(0, Math.floor((nowMs - startedAtMs) / 1000))
-      : 0;
+  const elapsedSeconds = counting
+    ? Math.max(0, Math.floor((nowMs - (startedAtMs as number)) / 1000))
+    : 0;
+
+  // เลยรอบที่ Logic ตั้งไว้แล้วแต่ปั๊มยังทำงาน → นับต่อเป็นเวลาที่เกินมา
+  // ไม่ใช่ 00:00:00 ค้าง ๆ ให้ดูเหมือน timer เสีย
+  const trusted =
+    counting && elapsedSeconds <= runtimeSeconds + STALE_START_GRACE_SECONDS;
+  const pastCycle =
+    trusted && runtimeSeconds > 0 && elapsedSeconds > runtimeSeconds;
   const remainingSeconds = Math.max(0, runtimeSeconds - elapsedSeconds);
-  const displaySeconds = counting ? remainingSeconds : runtimeSeconds;
+
+  const displaySeconds = !trusted
+    ? runtimeSeconds
+    : pastCycle
+      ? elapsedSeconds - runtimeSeconds
+      : remainingSeconds;
+  const runtimeNote = !pumpOn
+    ? 'เวลารดน้ำ · Logic'
+    : !trusted
+      ? 'ไม่รู้เวลาเริ่ม · Logic'
+      : pastCycle
+        ? 'เลยรอบ · Logic'
+        : 'เหลือ · Logic';
 
   return (
     <article className={`crop-card ${wide ? 'crop-wide' : ''}`}>
@@ -202,10 +223,11 @@ function CropCard({
               <i />
               {pumpOn ? 'กำลังทำงาน' : 'หยุดทำงาน'}
             </span>
-            <strong>{formatRuntime(displaySeconds)}</strong>
-            <span className="crop-runtime-note">
-              {counting ? 'เหลือ · Logic' : 'เวลารดน้ำ · Logic'}
-            </span>
+            <strong>
+              {pastCycle ? '+' : ''}
+              {formatRuntime(displaySeconds)}
+            </strong>
+            <span className="crop-runtime-note">{runtimeNote}</span>
           </div>
         </div>
       </div>
