@@ -31,6 +31,8 @@ interface ControlProps {
   pumpAlert?: PumpAlert | null;
   /** คุณภาพสัญญาณ LoRa จากรีซีฟเวอร์ (RSSI/SNR) */
   lora?: LoraSignal | null;
+  /** เวลาที่สั่งเปิดปั๊มล่าสุดของแต่ละแปลง (epoch ms) — ใช้ทำ countdown */
+  pumpCommandAt?: Partial<Record<ZoneId, number>>;
 }
 
 /**
@@ -52,6 +54,7 @@ export default function Control({
   deviceOnline,
   pumpAlert = null,
   lora = null,
+  pumpCommandAt = {},
 }: ControlProps) {
   const updatedLabel = lastUpdated.toLocaleTimeString('th-TH', {
     hour: '2-digit',
@@ -132,6 +135,7 @@ export default function Control({
         busyZone={busyZone}
         onTogglePump={onTogglePump}
         etoMmPerDay={weather.etoMmPerDay}
+        pumpCommandAt={pumpCommandAt}
       />
 
       <WaterSection

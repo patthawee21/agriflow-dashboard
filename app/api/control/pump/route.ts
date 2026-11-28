@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import {
+  getPumpCommandAt,
   getStore,
   getValveHolders,
   reconcileSharedValves,
@@ -58,12 +59,16 @@ export async function GET(request: Request) {
 
   const zones = getStore().zones;
 
+  // pumpCommandAt = เวลาที่สั่งเปิด/ปิดล่าสุด (epoch ms) → หน้าเว็บใช้ทำ countdown
+  const commandAt = getPumpCommandAt();
+
   const data = zones.map((zone) => ({
     zone: zone.id,
     name: zone.name,
     group_id: ZONE_GROUP_IDS[zone.id],
     pumpOn: zone.pumpOn,
     state: zone.pumpOn ? 'ON' : 'OFF',
+    pumpCommandAt: commandAt[zone.id] ?? null,
   }));
 
   const mqtt = getMqttStatus();

@@ -167,3 +167,39 @@ export async function setZonePumpState(
     return { ok: false, error: 'เชื่อมต่อ server ไม่ได้' };
   }
 }
+
+/**
+ * GET /api/control/pump — เวลาที่สั่งปั๊มล่าสุดของแต่ละแปลง (epoch ms)
+ * ใช้ทำ countdown บนการ์ด จะได้นับจากเวลาเปิดปั๊มจริง ไม่ใช่เวลาที่โหลดหน้า
+ */
+export async function fetchPumpCommandAt(): Promise<
+  Partial<Record<ZoneId, number>> | null
+> {
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/api/control/pump`, {
+      cache: 'no-store',
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const data = (await res.json()) as {
+      zones?: Array<{ zone: ZoneId; pumpCommandAt?: number | null }>;
+    };
+    const map: Partial<Record<ZoneId, number>> = {};
+
+    for (const item of data.zones ?? []) {
+      if (
+        typeof item.pumpCommandAt === 'number' &&
+        Number.isFinite(item.pumpCommandAt)
+      ) {
+        map[item.zone] = item.pumpCommandAt;
+      }
+    }
+
+    return map;
+  } catch (err) {
+    console.warn('[API Service] Failed to fetch pump command times:', err);
+
+    return null;
+  }
+}

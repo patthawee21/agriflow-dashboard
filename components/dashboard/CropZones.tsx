@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Power } from 'lucide-react';
 
@@ -14,6 +14,8 @@ interface CropZonesProps {
   busyZone: ZoneId | null;
   onTogglePump: (zoneId: ZoneId, scope?: 'valve') => void;
   etoMmPerDay: number | null;
+  /** เวลาที่สั่งเปิดปั๊มล่าสุดของแต่ละแปลง (epoch ms) — ใช้ทำ countdown */
+  pumpCommandAt?: Partial<Record<ZoneId, number>>;
 }
 
 type CropTone = 'ok' | 'warn' | 'watering' | 'idle';
@@ -57,6 +59,30 @@ function anyPumpOn(zones: Zone[], ids: ZoneId[]): boolean {
   return ids.some((id) => getZone(zones, id)?.pumpOn === true);
 }
 
+/**
+ * เวลาที่ปั๊มของวาล์วนี้เริ่มทำงาน — เอาจากแปลงที่เปิดอยู่และ server บอกเวลาล่าสุด
+ * null = ไม่รู้ (server รีสตาร์ท หรือสั่งจากที่อื่น) → การ์ดแสดงเวลาต่อรอบเต็ม
+ */
+function startedAtFor(
+  zones: Zone[],
+  pumpCommandAt: Partial<Record<ZoneId, number>>,
+  ids: ZoneId[]
+): number | null {
+  let latest: number | null = null;
+
+  for (const id of ids) {
+    if (getZone(zones, id)?.pumpOn !== true) continue;
+
+    const at = pumpCommandAt[id];
+
+    if (typeof at === 'number' && (latest === null || at > latest)) {
+      latest = at;
+    }
+  }
+
+  return latest;
+}
+
 function cropStatus(
   pumpOn: boolean,
   dry: boolean,
@@ -79,6 +105,7 @@ function CropCard({
   metrics,
   pumpOn,
   runtimeSeconds,
+  startedAtMs,
   busy,
   wide = false,
   onToggle,
@@ -93,33 +120,33 @@ function CropCard({
   pumpOn: boolean;
   /** เวลารดน้ำต่อรอบของวาล์วนี้ ตามที่ตั้งไว้ใน Logic (วินาที) */
   runtimeSeconds: number;
+  /** epoch ms ที่ server สั่งเปิดปั๊ม (null = ไม่รู้เวลาเริ่ม) */
+  startedAtMs: number | null;
   busy: boolean;
   wide?: boolean;
   onToggle: () => void;
 }) {
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const startedAtRef = useRef<number | null>(null);
-
-  // ปั๊มเริ่มทำงาน = เริ่มนับถอยหลัง / หยุด = กลับไปแสดงเวลาต่อรอบเต็ม
-  useEffect(() => {
-    startedAtRef.current = pumpOn ? Date.now() : null;
-    setNowMs(Date.now());
-  }, [pumpOn]);
 
   // เดินเวลาทุกวินาทีเฉพาะตอนปั๊มทำงาน (ตอนหยุดไม่ต้อง re-render)
   useEffect(() => {
     if (!pumpOn) return;
+
+    setNowMs(Date.now());
 
     const timer = setInterval(() => setNowMs(Date.now()), 1000);
 
     return () => clearInterval(timer);
   }, [pumpOn]);
 
+  // นับจากเวลาที่ server สั่งเปิดจริง → เปิดหน้ากลางรอบก็ได้เลขที่ถูก
+  const counting = pumpOn && startedAtMs !== null;
   const elapsedSeconds =
-    startedAtRef.current === null
-      ? 0
-      : Math.max(0, Math.floor((nowMs - startedAtRef.current) / 1000));
+    pumpOn && startedAtMs !== null
+      ? Math.max(0, Math.floor((nowMs - startedAtMs) / 1000))
+      : 0;
   const remainingSeconds = Math.max(0, runtimeSeconds - elapsedSeconds);
+  const displaySeconds = counting ? remainingSeconds : runtimeSeconds;
 
   return (
     <article className={`crop-card ${wide ? 'crop-wide' : ''}`}>
@@ -175,9 +202,9 @@ function CropCard({
               <i />
               {pumpOn ? 'กำลังทำงาน' : 'หยุดทำงาน'}
             </span>
-            <strong>{formatRuntime(pumpOn ? remainingSeconds : runtimeSeconds)}</strong>
+            <strong>{formatRuntime(displaySeconds)}</strong>
             <span className="crop-runtime-note">
-              {pumpOn ? 'เหลือ · Logic' : 'เวลารดน้ำ · Logic'}
+              {counting ? 'เหลือ · Logic' : 'เวลารดน้ำ · Logic'}
             </span>
           </div>
         </div>
@@ -195,6 +222,7 @@ export default function CropZones({
   busyZone,
   onTogglePump,
   etoMmPerDay,
+  pumpCommandAt = {},
 }: CropZonesProps) {
   const soilKpa = getValue(zones, 'herb', 'soilWaterKpa');
   const riceEto = getValue(zones, 'rice', 'etoMmPerHour');
@@ -236,6 +264,7 @@ export default function CropZones({
           status={statusOne}
           pumpOn={zoneOneOn}
           runtimeSeconds={getValveRuntimeSeconds(getZoneConfig('herb').valveId)}
+          startedAtMs={startedAtFor(zones, pumpCommandAt, ['herb'])}
           busy={busyZone === 'herb'}
           onToggle={() => onTogglePump('herb')}
           metrics={[
@@ -256,6 +285,7 @@ export default function CropZones({
           status={statusTwo}
           pumpOn={zoneTwoOn}
           runtimeSeconds={getValveRuntimeSeconds(getZoneConfig('rice').valveId)}
+          startedAtMs={startedAtFor(zones, pumpCommandAt, ['rice'])}
           busy={busyZone === 'rice'}
           onToggle={() => onTogglePump('rice')}
           metrics={[
@@ -283,6 +313,11 @@ export default function CropZones({
           runtimeSeconds={getValveRuntimeSeconds(
             getZoneConfig('sunnhemp').valveId
           )}
+          startedAtMs={startedAtFor(zones, pumpCommandAt, [
+            'sunnhemp',
+            'sunflower',
+            'potted',
+          ])}
           busy={busyZone === 'sunnhemp'}
           wide
           onToggle={() => onTogglePump('sunnhemp', 'valve')}

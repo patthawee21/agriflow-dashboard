@@ -9,7 +9,11 @@ import Docs from './Docs';
 import DataStorage from './DataStorage';
 import DebugLog from './DebugLog';
 
-import { fetchLatestSensors, setZonePumpState } from '../lib/services/api';
+import {
+  fetchLatestSensors,
+  fetchPumpCommandAt,
+  setZonePumpState,
+} from '../lib/services/api';
 
 import type {
   LoraSignal,
@@ -91,6 +95,12 @@ export default function Dashboard() {
   const [zones, setZones] = useState<Zone[]>([]);
   const [busyZone, setBusyZone] = useState<ZoneId | null>(null);
 
+  // เวลาที่สั่งเปิดปั๊มของแต่ละแปลง (epoch ms จาก /api/control/pump)
+  // ใช้ทำ countdown ให้เปิดหน้ากลางรอบแล้วนับต่อจากเวลาเปิดจริง
+  const [pumpCommandAt, setPumpCommandAt] = useState<
+    Partial<Record<ZoneId, number>>
+  >({});
+
   // สถานะที่เพิ่งสั่ง + เวลาที่สั่ง (กัน poll รอบถัดไปทับด้วยค่าเก่า)
   const pumpCommandHold = useRef(new Map<ZoneId, { on: boolean; at: number }>());
   // คำเตือนเมื่อสั่งปิดวาล์วที่แปลงอื่นยังใช้อยู่
@@ -135,7 +145,11 @@ export default function Dashboard() {
     let timer: number | undefined;
 
     const poll = async () => {
-      const snapshot = await fetchLatestSensors();
+      // ดึงเวลาสั่งปั๊มพ่วงไปด้วย (คนละ endpoint แต่ต้องมาพร้อมกัน)
+      const [snapshot, commandTimes] = await Promise.all([
+        fetchLatestSensors(),
+        fetchPumpCommandAt(),
+      ]);
 
       if (cancelled) return;
 
@@ -175,6 +189,9 @@ export default function Dashboard() {
       setZones(heldZones);
       setPumpOn(heldZones.some((zone) => zone.pumpOn === true));
       setPumpAlert(snapshot.pumpAlert ?? null);
+
+      // ดึงไม่ได้ = คงค่าเดิม ไม่ให้ countdown กระพริบ
+      if (commandTimes) setPumpCommandAt(commandTimes);
 
       const parsedTime = new Date(snapshot.updatedAt);
       const now = Number.isNaN(parsedTime.getTime())
@@ -324,6 +341,18 @@ export default function Dashboard() {
         });
       }
 
+      // countdown เริ่มนับทันที ไม่ต้องรอ poll รอบถัดไป
+      setPumpCommandAt((current) => {
+        const next = { ...current };
+
+        for (const item of result.zones ?? []) {
+          if (item.pumpOn) next[item.id] = commandAt;
+          else delete next[item.id];
+        }
+
+        return next;
+      });
+
       // API คืนทุกแปลงที่ใช้วาล์วร่วมกัน → การ์ดทุกใบอัปเดตพร้อมกัน
       const byId = new Map(result.zones.map((item) => [item.id, item]));
 
@@ -384,6 +413,7 @@ export default function Dashboard() {
             deviceOnline={deviceOnline}
             pumpAlert={pumpAlert}
             lora={lora}
+            pumpCommandAt={pumpCommandAt}
           />
         ) : page === 'docs' ? (
           <Docs />
