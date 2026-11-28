@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
+
 import { Power } from 'lucide-react';
 
 import SectionHeader from './SectionHeader';
@@ -95,6 +97,30 @@ function CropCard({
   wide?: boolean;
   onToggle: () => void;
 }) {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const startedAtRef = useRef<number | null>(null);
+
+  // ปั๊มเริ่มทำงาน = เริ่มนับถอยหลัง / หยุด = กลับไปแสดงเวลาต่อรอบเต็ม
+  useEffect(() => {
+    startedAtRef.current = pumpOn ? Date.now() : null;
+    setNowMs(Date.now());
+  }, [pumpOn]);
+
+  // เดินเวลาทุกวินาทีเฉพาะตอนปั๊มทำงาน (ตอนหยุดไม่ต้อง re-render)
+  useEffect(() => {
+    if (!pumpOn) return;
+
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+
+    return () => clearInterval(timer);
+  }, [pumpOn]);
+
+  const elapsedSeconds =
+    startedAtRef.current === null
+      ? 0
+      : Math.max(0, Math.floor((nowMs - startedAtRef.current) / 1000));
+  const remainingSeconds = Math.max(0, runtimeSeconds - elapsedSeconds);
+
   return (
     <article className={`crop-card ${wide ? 'crop-wide' : ''}`}>
       <div
@@ -149,8 +175,10 @@ function CropCard({
               <i />
               {pumpOn ? 'กำลังทำงาน' : 'หยุดทำงาน'}
             </span>
-            <strong>{formatRuntime(runtimeSeconds)}</strong>
-            <span className="crop-runtime-note">เวลารดน้ำ · Logic</span>
+            <strong>{formatRuntime(pumpOn ? remainingSeconds : runtimeSeconds)}</strong>
+            <span className="crop-runtime-note">
+              {pumpOn ? 'เหลือ · Logic' : 'เวลารดน้ำ · Logic'}
+            </span>
           </div>
         </div>
       </div>
